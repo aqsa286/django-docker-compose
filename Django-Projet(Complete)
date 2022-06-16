@@ -1,0 +1,202 @@
+
+==> Project: Deploying Django with Docker Compose, Gunicorn and Nginx
+
+==> mkdir django-docker-compose
+> cd django-docker-compose
+> pip install Django
+> django-admin startproject django_project
+
+:: Now it will created directory in subdirectory like: "/django_project/django_project/"
+some subfiles will be created here.
+:: In "django-docker-compose" file.
+
+=> nano requirements.txt          ---> In Root directory.
+      
+Django==3.0.8
+gunicorn==20.0.4
+
+=> nano Dockerfile               ---> In Root directory.
+
+FROM python:3.8.5-alpine
+
+RUN pip install --upgrade pip
+
+
+COPY ./requirements.txt .
+RUN pip install -r requirements.txt
+
+COPY ./django_project /app
+WORKDIR /app
+
+COPY ./entrypoint.sh /
+ENTRYPOINT ["sh", "/entrypoint.sh"]
+
+=> nano entrypoint.sh
+
+#! /bin/bash
+
+python3 manage.py migrate --no-input
+python3 manage.py colletstatic --no-input
+
+gunicorn django_project.wsgi:application --bind 0.0.0.0:8000
+
+
+=> nano docker-compose.yml
+
+version: '3.7'
+
+services:
+  django_gunicorn:
+    volumes:
+      - static:/static
+    env_file:
+      - .env
+    build: 
+      context: .
+    ports: 
+      - "8000:8000"
+
+volumes:
+   static:
+
+
+=> nano .env
+
+SECRET_KEY='z72b4t4@&cd*xaq7p04t8_vstht_b^ej)(l=k8447mteh%=4'
+DEBUG=True
+
+> nano django_project/django_project/settings.py    --> do some changes in this file.
+
+...................
+SECRET_KEY='.....'    --> comment it with "hash #".
+
+SECRET_KEY = os.getenv('SECRET_KEY')        ---> Add this line.
+
+.........
+DEBUG=TRUE            --> comment it.
+
+DEBUG = os.getenv('DEBUG')                  ---> Add this line.
+
+ALLOWED_HOSTS = ['*']                       ---> Add staric '*' here.
+
+...................
+.....
+.....
+STATIC_ROOT = '/static'                   ---> Add this line here at the end.
+STATIC_URL = '/static/'
+
+=> mkdir nginx
+> cd nginx
+
+> nano default.conf
+
+upstream django {
+    server django_gunicorn:8000;
+}
+
+server {
+    listen 80;
+
+    location / {
+        proxy_pass http://django;
+    }
+
+    location /static/ {
+        alias /static/;
+    }
+}
+
+> nano Dockerfile
+
+FROM nginx:1.19.0-alpine
+
+COPY ./default.conf /etc/nginx/conf.d/
+
+:: Come back in django-docker-compose directory.
+
+> nano docker-compose.yml         ---> Add nginx and depends_on in it.
+
+version: '3.7'
+
+services:
+  django_gunicorn:
+    volumes:
+      - static:/static
+    env_file:
+      - .env
+    build: 
+      context: .
+    ports: 
+      - "8000:8000"
+  nginx:                             
+    build: ./nginx
+    volumes: 
+      - static:/static
+    ports:
+      - "80:80"
+    depends_on:
+      - django_gunicorn
+
+volumes:
+   static:
+
+:: In terminal run this command:
+> docker-compose up --build
+
+:: Now go in browser and search : 0.0.0.0:8000 , now this will show you django default page.
+:: 0.0.0.0:8000/admin    ---> show you admin page.
+
+==> Extra commands:
+> docker network ls     
+> docker volumes ls
+> docker volume inspect django-docker-compose_static
+> sudo ls -la /var/lib/docker/volumes/django-docker-compose_static/_data  
+:: here will be admin file in css html.
+
+
+tree:
+--> cd django-docker-compose/
+
+.
+├── django_project
+│   ├── django_project
+│   │   ├── asgi.py
+│   │   ├── __init__.py
+│   │   ├── __pycache__
+│   │   ├── settings.py
+│   │   ├── urls.py
+│   │   └── wsgi.py
+│   ├── manage.py
+│
+├── docker-compose.yml
+├── Dockerfile
+├── entrypoint.sh
+│
+├── nginx
+│   ├── default.conf
+│   └── Dockerfile
+└── requirements.txt
+
+
+==> Create virtuale environment
+
+:: python3 -m venv env
+> source env/bin/activate
+:: (venv)$ ...  --> terminal show like this.
+
+
+Link: https://youtu.be/vJAfq6Ku4cI
+
+===================================
+==> Prepare Your Environment:
+> sudo apt install python3.8-venv         --> Set up a new virtual environment.
+> source env/bin/activate:                --> activate virtual environment. "env" in your current working directory.
+
+==> Install Django and Pin Your Dependencies:
+> python -m pip install django
+> python -m pip freeze > requirements.txt    --> Pin your dependencies, reads all names and versions of the pinned packages from your requirements.txt file.
+> python -m pip install -r requirements.txt  --> Setup a django project.
+> django-admin startproject <project-name>   --> Start a django app
+
+:: python manage.py migrate --no-input  --> use of "--no-input " at the end of command it mean it will done it automatically yes if this will ask any question.
+
